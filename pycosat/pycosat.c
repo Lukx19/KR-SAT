@@ -137,7 +137,7 @@ static PicoSAT* setup_picosat(PyObject *args, PyObject *kwds)
 {
     PicoSAT *picosat;
     PyObject *clauses;          /* iterable of clauses */
-    int vars = -1, verbose = 1;
+    int vars = -1, verbose = 0;
     unsigned long long prop_limit = 0;
     static char* kwlist[] = {"clauses",
                              "vars", "verbose", "prop_limit", NULL};
@@ -169,11 +169,13 @@ static PicoSAT* setup_picosat(PyObject *args, PyObject *kwds)
 /* read the solution from the picosat object and return a Python list */
 static PyObject* get_solution(PicoSAT *picosat)
 {
+    PyObject * dict;
     PyObject *list;
     int max_idx, i, v;
 
     max_idx = picosat_variables(picosat);
     list = PyList_New((Py_ssize_t) max_idx);
+    dict = PyDict_New();
     if (list == NULL) {
         picosat_reset(picosat);
         return NULL;
@@ -188,7 +190,15 @@ static PyObject* get_solution(PicoSAT *picosat)
             return NULL;
         }
     }
-    return list;
+    PyDict_SetItemString(dict, "clauses", list);
+    PyDict_SetItemString(dict, "decisions", PyInt_FromLong((long) (picosat_decisions(picosat))));
+    PyDict_SetItemString(dict, "propagations", PyInt_FromLong((long) (picosat_propagations(picosat))));
+    PyDict_SetItemString(dict, "visits", PyInt_FromLong((long) (picosat_visits(picosat))));
+    // PyList_SetItem(list, (Py_ssize_t) (max_idx), 
+    //     PyInt_FromLong((long) (picosat_decisions(picosat))));
+    // PyList_SetItem(list, (Py_ssize_t) (max_idx+1), 
+    //     PyInt_FromLong((long) (picosat_iterations(picosat))));
+    return dict;
 }
 
 static PyObject* solve(PyObject *self, PyObject *args, PyObject *kwds)
