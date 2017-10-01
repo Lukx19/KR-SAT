@@ -16,9 +16,9 @@
 
 
 #include "picosat.h"
-#ifndef DONT_INCLUDE_PICOSAT
+// #ifndef DONT_INCLUDE_PICOSAT
 #include "picosat.c"
-#endif
+// #endif
 
 #if PY_MAJOR_VERSION >= 3
 #define IS_PY3K
@@ -176,9 +176,10 @@ static PyObject* get_solution(PicoSAT *picosat)
     max_idx = picosat_variables(picosat);
     list = PyList_New((Py_ssize_t) max_idx);
     dict = PyDict_New();
+    PyDict_SetItemString(dict, "solved", Py_False);
     if (list == NULL) {
         picosat_reset(picosat);
-        return NULL;
+        return dict;
     }
     for (i = 1; i <= max_idx; i++) {
         v = picosat_deref(picosat, i);
@@ -187,17 +188,19 @@ static PyObject* get_solution(PicoSAT *picosat)
                            PyInt_FromLong((long) (v * i))) < 0) {
             Py_DECREF(list);
             picosat_reset(picosat);
-            return NULL;
+            return dict;
         }
     }
+    PyDict_SetItemString(dict, "solved", Py_True);
     PyDict_SetItemString(dict, "clauses", list);
     PyDict_SetItemString(dict, "decisions", PyInt_FromLong((long) (picosat_decisions(picosat))));
     PyDict_SetItemString(dict, "propagations", PyInt_FromLong((long) (picosat_propagations(picosat))));
     PyDict_SetItemString(dict, "visits", PyInt_FromLong((long) (picosat_visits(picosat))));
-    // PyList_SetItem(list, (Py_ssize_t) (max_idx), 
-    //     PyInt_FromLong((long) (picosat_decisions(picosat))));
-    // PyList_SetItem(list, (Py_ssize_t) (max_idx+1), 
-    //     PyInt_FromLong((long) (picosat_iterations(picosat))));
+    PyDict_SetItemString(dict, "seconds", PyFloat_FromDouble(picosat->seconds));
+    PyDict_SetItemString(dict, "avg_level", PyFloat_FromDouble(avglevel(picosat)));
+    PyDict_SetItemString(dict, "conflicts", PyInt_FromLong((long)picosat->conflicts));
+    PyDict_SetItemString(dict, "assignments", PyInt_FromLong((long)picosat->assignments));
+    PyDict_SetItemString(dict, "restarts", PyInt_FromLong((long)picosat->restarts));
     return dict;
 }
 

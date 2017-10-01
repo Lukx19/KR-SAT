@@ -5,96 +5,150 @@ The implementation of this Sudoku solver is based on the paper:
 
     https://www.lri.fr/~conchon/mpri/weber.pdf
 
-If you want to understand the code below, in particular the function valid(),
-which calculates the 324 clauses corresponding to 9 cells, you are strongly
+If you want to understand the clause generation below, you are strongly
 encouraged to read the paper first.  The paper is very short, but contains
 all necessary information.
 """
 import pycosat
 
-SIZE = 9
+def v(i, j, d,size_block):
+    return size_block**4 * (i - 1) + size_block**2 * (j - 1) + int(d)
 
-def v(i, j, d):
-    """
-    Return the number of the variable of cell i, j and digit d,
-    which is an integer in the range of 1 to 729 (including).
-    """
-    return 81 * (i - 1) + 9 * (j - 1) + d
+def cell_d(size_block):
+    size = size_block**2
+    clauses = []
+    for r in range(1, size+1):
+        for c in range(1, size+1):
+            clauses.append([v(r,c,d,size_block) for d in range(1,size+1)])
+    return clauses
 
+def cell_u(size_block):
+    size = size_block**2
+    clauses = []
+    for r in range(1, size+1):
+        for c in range(1, size+1):
+            for di in range(1,size):
+                for dj in range(di+1,size+1):
+                    clauses.append([-v(r,c,di,size_block),-v(r,c,dj,size_block)])
+    return clauses
 
-def sudoku_clauses():
-    """
-    Create the (11745) Sudoku clauses, and return them as a list.
-    Note that these clauses are *independent* of the particular
-    Sudoku puzzle at hand.
-    """
-    res = []
-    # for all cells, ensure that the each cell:
-    for i in range(1, 10):
-        for j in range(1, 10):
-            # denotes (at least) one of the 9 digits (1 clause)
-            res.append([v(i, j, d) for d in range(1, 10)])
-            # does not denote two different digits at once (36 clauses)
-            for d in range(1, 10):
-                for dp in range(d + 1, 10):
-                    res.append([-v(i, j, d), -v(i, j, dp)])
+def row_d(size_block):
+    size = size_block**2
+    clauses = []
+    for r in range(1, size+1):
+        for d in range(1, size+1):
+            clauses.append([v(r,c,d,size_block) for c in range(1,size+1)])
+    return clauses
 
-    def valid(cells):
-        # Append 324 clauses, corresponding to 9 cells, to the result.
-        # The 9 cells are represented by a list tuples.  The new clauses
-        # ensure that the cells contain distinct values.
-        for i, xi in enumerate(cells):
-            for j, xj in enumerate(cells):
-                if i < j:
-                    for d in range(1, 10):
-                        res.append([-v(xi[0], xi[1], d), -v(xj[0], xj[1], d)])
+def row_u(size_block):
+    size = size_block**2
+    clauses = []
+    for r in range(1, size+1):
+        for d in range(1, size+1):
+            for ci in range(1,size):
+                for cj in range(ci+1,size+1):
+                    clauses.append([-v(r,ci,d,size_block),-v(r,cj,d,size_block)])
+    return clauses
 
-    # ensure rows and columns have distinct values
-    for i in range(1, 10):
-        valid([(i, j) for j in range(1, 10)])
-        valid([(j, i) for j in range(1, 10)])
-    # ensure 3x3 sub-grids "regions" have distinct values
-    for i in 1, 4, 7:
-        for j in 1, 4 ,7:
-            valid([(i + k % 3, j + k // 3) for k in range(9)])
+def col_d(size_block):
+    size = size_block**2
+    clauses = []
+    for c in range(1, size+1):
+        for d in range(1, size+1):
+            clauses.append([v(r,c,d,size_block) for r in range(1,size+1)])
+    return clauses
 
-    assert len(res) == 81 * (1 + 36) + 27 * 324
-    return res
+def col_u(size_block):
+    size = size_block**2
+    clauses = []
+    for c in range(1, size+1):
+        for d in range(1, size+1):
+            for ri in range(1,size):
+                for rj in range(ri+1,size+1):
+                    # print(ri,c,d,"|",rj,c,d)
+                    clauses.append([-v(ri,c,d,size_block),-v(rj,c,d,size_block)])
+    return clauses
 
+def block_d(size_block):
+    size = size_block**2
+    clauses = []
+    for r_offs in range(0,size_block):
+        for c_offs in range(0,size_block):
+            for d in range(1,size+1):
+                clause = []
+                for r in range(1,size_block+1):
+                    for c in range(1,size_block+1):
+                        # print(r_offs*size_block+r,c_offs*size_block+c,d)
+                        clause.append(v(r_offs*size_block+r,
+                            c_offs*size_block+c,d,size_block))
+                clauses.append(clause)
+    return clauses
 
-def solve(sudoku):
-    """
-    solve a Sudoku grid inplace
-    """
-    clauses = sudoku_clauses()
-    for i in range(1, 10):
-        for j in range(1, 10):
-            d = sudoku[(i-1) * SIZE + (j-1)]
+def valid(cells,size_block):
+    # Append 324 clauses, corresponding to 9 cells, to the result.
+    # The 9 cells are represented by a list tuples.  The new clauses
+    # ensure that the cells contain distinct values.
+    size = size_block**2
+    clauses = []
+    for i, xi in enumerate(cells):
+        for j, xj in enumerate(cells):
+            if i < j:
+                for d in range(1, size+1):
+                    # print(xi[0],xi[1],d,"|",xj[0],xj[1],d)
+                    clauses.append([-v(xi[0], xi[1], d,size_block), -v(xj[0], xj[1], d,size_block)])
+    return clauses
+
+def block_u(size_block):
+    size = size_block**2
+    clauses = []
+    block_idx = [x * size_block+1 for x in range(0, size_block)]
+    for i in block_idx:
+        for j in block_idx:
+            clauses+=valid([(i + k % size_block, j + k // size_block) for k in range(size)],size_block)
+    return clauses
+
+def extended_encoding_clauses(size_block):
+    clauses = cell_d(size_block)
+    clauses+=cell_u(size_block)
+    clauses+=row_d(size_block)
+    clauses+=row_u(size_block)
+    clauses+=col_d(size_block)
+    clauses+=col_u(size_block)
+    clauses+=block_d(size_block)
+    clauses+=block_u(size_block)
+    return clauses
+
+def solve(sudoku, size_block, clauses):
+    size = size_block ** 2
+    for i in range(1, size+1):
+        for j in range(1, size+1):
+            d = int(sudoku[(i-1) * size + (j-1)])
             # For each digit already known, a clause (with one literal).
-            # Note:
-            #     We could also remove all variables for the known cells
-            #     altogether (which would be more efficient).  However, for
-            #     the sake of simplicity, we decided not to do that.
             if d:
-                clauses.append([v(i, j, d)])
+                clauses.append([v(i, j, d,size_block)])
 
     # solve the SAT problem
     sol = pycosat.solve(clauses)
+    if sol == 'UNSAT' or sol == 'UNKNOWN' or  not sol['solved']:
+        print("Picosat unsuccessful: ",sol)
+        return {'solved':False}
     sol_clauses = sol['clauses']
     def read_cell(i, j):
         # return the digit of cell i, j according to the solution
-        for d in range(1, 10):
-            if v(i, j, d) in sol_clauses:
+        for d in range(1, size+1):
+            if v(i, j, d,size_block) in sol_clauses:
                 return d
-    sol_sudoku = [0 for i in range(SIZE**2)]            
-    for i in range(1, 10):
-        for j in range(1, 10):
-            sol_sudoku[(i-1) * SIZE + (j-1)] = read_cell(i, j) 
+
+    sol_sudoku = [0 for i in range(size**2)]            
+    for i in range(1, size+1):
+        for j in range(1, size+1):
+            sol_sudoku[(i-1) * size + (j-1)] = read_cell(i, j) 
     sol['solution'] = sol_sudoku
     return sol
 
 if __name__ == '__main__':
-
+    # extended_encoding_clauses(2)
+    # quit()
     # hard Sudoku problem, see Fig. 3 in paper by Weber
     hard = [0, 2, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 6, 0, 0, 0, 0, 3,
@@ -105,7 +159,8 @@ if __name__ == '__main__':
             0, 0, 0, 0, 1, 0, 7, 8, 0,
             5, 0, 0, 0, 0, 9, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 4, 0]
-    sol = solve(hard)
+    sol = solve(hard,3,extended_encoding_clauses(3))
+    print(sol)
     assert [1, 2, 6, 4, 3, 7, 9, 5, 8,
             8, 9, 5, 6, 2, 1, 4, 7, 3,
             3, 7, 4, 9, 8, 5, 1, 2, 6,
@@ -115,3 +170,8 @@ if __name__ == '__main__':
             2, 6, 9, 3, 1, 4, 7, 8, 5,
             5, 4, 8, 7, 6, 9, 2, 3, 1,
             7, 3, 1, 8, 5, 2, 6, 4, 9] == sol['solution']
+
+    hard66 = [25,36,16,28,32,0,0,4,0,30,13,1,0,34,0,24,33,0,0,0,0,0,31,0,0,26,19,0,29,22,20,0,17,12,15,0,0,0,0,14,4,0,0,35,0,0,0,0,1,0,0,0,0,0,0,21,16,0,0,34,0,0,0,0,0,24,0,0,23,0,6,3,0,22,0,7,30,0,0,11,2,0,26,0,0,13,0,0,15,0,0,0,0,5,0,0,35,4,0,27,8,0,0,0,0,25,0,0,23,18,8,0,0,5,0,15,20,36,16,0,31,9,4,10,0,0,1,0,0,28,27,25,0,7,0,0,32,12,26,0,0,0,0,0,9,15,1,2,0,0,0,0,0,0,10,0,19,17,18,0,0,0,4,36,11,0,23,20,14,0,0,33,0,0,8,22,30,28,34,0,0,3,0,21,31,13,0,8,23,19,7,27,0,16,0,26,0,0,0,35,0,0,33,0,0,1,34,36,28,0,0,0,0,32,18,24,0,26,34,0,24,0,0,0,0,10,0,4,0,0,16,28,2,15,29,0,5,0,25,0,0,17,0,21,1,0,9,0,20,0,23,11,0,0,0,20,17,28,24,33,0,0,6,0,0,0,34,12,0,25,0,0,0,0,15,0,29,16,3,0,0,0,0,19,8,27,0,22,0,0,19,0,0,8,23,0,15,0,0,0,0,30,0,0,27,4,0,1,0,10,21,0,0,0,0,31,26,11,0,0,0,29,0,25,15,32,12,10,0,31,0,0,0,2,0,34,26,18,9,0,29,8,16,0,0,20,0,0,0,27,0,22,14,0,0,1,13,0,28,5,33,0,0,0,22,4,26,0,18,31,0,0,20,0,0,0,0,0,28,3,0,2,0,7,23,8,36,0,15,0,0,0,10,34,24,0,0,7,23,0,0,29,30,0,17,13,8,0,0,32,0,21,0,24,6,27,0,0,26,22,10,34,0,0,0,9,16,3,0,0,0,2,21,0,0,6,13,25,0,0,0,4,2,18,5,7,0,0,0,0,0,0,28,0,0,9,12,0,11,0,27,29,30,0,0,0,33,0,34,28,22,23,0,1,29,5,11,0,19,0,9,3,0,25,12,0,0,24,0,0,0,0,4,0,0,13,21,18,0,0,0,0,8,7,19,0,0,0,8,0,0,34,31,0,1,20,0,0,24,0,0,0,22,0,12,0,16,15,32,0,0,0,9,0,25,6,0,3,0,23,0,0,18,15,3,36,17,9,0,7,24,8,27,0,0,1,0,0,35,33,21,0,0,0,28,25,0,0,31,0,12,13,22,0,0,34,12,0,29,4,9,0,13,22,10,0,25,28,0,2,8,0,0,32,36,31,20,18,6,0,0,30,0,16,24,0,0,0,1,0,0,21,31,0,0,26,14,27,21,0,0,0,0,23,0,35,0,13,0,17,0,32,0,0,34,4,0,0,1,0,22,36,0,18,0,9,10,0,0,2,32,0,29,0,16,21,0,18,0,0,11,19,0,0,1,0,7,0,34,0,3,0,30,0,0,0,0,26,28,36,5,0,0,14,7,0,0,13,0,0,0,10,33,0,17,0,0,26,22,34,3,9,21,0,0,15,5,0,31,29,0,20,35,28,0,24,25,8,0,12,35,0,0,19,25,24,0,26,0,0,5,32,0,0,0,36,23,13,0,0,22,0,0,28,9,12,8,0,17,4,21,16,2,18,0,0,36,0,14,0,28,33,0,23,0,0,0,15,6,31,0,8,0,16,0,0,0,24,0,0,27,21,0,32,11,0,0,26,0,0,0,1,3,5,0,0,0,0,7,1,27,0,0,11,0,0,0,0,32,0,0,30,8,0,17,13,0,36,0,18,33,10,19,0,34,23,9,15,0,8,0,0,0,15,6,13,0,9,0,24,4,0,0,30,0,0,0,0,0,0,29,1,34,14,2,0,0,0,17,10,31,0,0,33,22,0,0,0,33,32,10,0,0,0,30,26,21,36,0,0,5,20,15,0,14,0,12,0,0,6,31,17,0,23,34,0,0,11,27,0,0,12,3,11,0,0,0,7,0,32,33,6,25,0,35,0,24,27,0,0,0,0,0,30,0,0,22,29,0,16,13,15,0,0,0,19,29,34,0,5,1,0,0,2,12,0,4,0,0,0,14,0,0,28,19,26,0,32,13,21,25,0,15,0,0,0,18,0,36,24,16,8,18,0,17,0,0,0,20,36,9,0,0,0,0,8,7,0,10,0,24,11,0,0,1,0,0,0,0,12,0,2,22,0,0,35,0,0,30,0,2,31,15,0,0,0,0,35,18,29,0,12,0,0,0,0,17,0,36,27,0,0,0,11,0,0,7,1,23,33,6,0,0,0,10,13,0,8,0,16,0,24,25,0,27,0,0,23,0,22,0,33,9,5,35,31,0,0,19,0,32,0,0,0,0,29,0,30,12,0,1,29,15,0,0,0,0,12,35,28,21,0,0,33,0,0,9,0,0,0,10,0,36,0,16,23,26,4,20,0,6,25,27,0,19,0,0,14,13,18,36,23,0,0,6,0,0,2,29,28,0,3,16,35,0,0,0,22,4,19,0,32,0,0,0,0,0,0,9,31,11,10,0,0,0,0,0,34,27,31,0,0,3,0,32,5,36,0,0,21,0,0,29,25,9,16,0,22,24,7,13,0,4,0,0,33,1,26,0,0,27,0,0,0,0,29,36,0,22,10,0,0,15,0,0,0,0,2,0,0,35,0,0,31,0,9,25,0,0,8,16,0,3,0,2,25,0,9,0,0,32,0,0,0,0,0,34,0,0,27,19,0,0,0,0,0,0,17,0,0,0,0,10,0,0,12,35,0,0,0,0,31,30,17,0,3,33,14,0,24,23,0,0,25,0,0,0,0,0,7,26,0,18,0,36,2,12,0,6,0,0,28,15,20,13,32]
+    sol = solve(hard66,6,extended_encoding_clauses(6))
+    print(sol)
+    assert [25,36,16,28,32,11,18,4,21,30,13,1,14,34,5,24,33,23,10,9,7,8,31,2,3,26,19,6,29,22,20,27,17,12,15,35,26,19,33,14,4,12,25,35,28,29,32,31,1,11,27,20,8,30,13,21,16,17,22,34,15,10,9,2,18,24,36,7,23,5,6,3,6,22,24,7,30,10,34,11,2,17,26,14,28,13,21,29,15,36,3,19,18,5,32,12,35,4,23,27,8,20,1,9,33,25,31,16,23,18,8,29,34,5,22,15,20,36,16,33,31,9,4,10,35,3,1,6,24,28,27,25,17,7,30,11,32,12,26,21,19,14,2,13,9,15,1,2,27,35,12,6,24,5,10,3,19,17,18,32,25,7,4,36,11,26,23,20,14,13,21,33,16,31,8,22,30,28,34,29,17,3,20,21,31,13,9,8,23,19,7,27,12,16,2,26,22,6,30,35,15,14,33,29,5,1,34,36,28,25,10,11,4,32,18,24,13,26,34,3,24,18,19,27,7,10,14,4,35,22,16,28,2,15,29,8,5,12,25,31,6,17,33,21,1,32,9,30,20,36,23,11,11,30,9,20,17,28,24,33,32,1,6,21,23,10,34,12,7,25,14,18,4,36,15,35,29,16,3,5,2,13,31,19,8,27,26,22,16,6,19,36,2,8,23,28,15,22,9,5,3,30,17,33,27,4,34,1,13,10,21,32,24,20,18,31,26,11,35,14,12,29,7,25,15,32,12,10,35,31,36,25,3,2,11,34,26,18,9,6,29,8,16,17,30,20,24,23,7,27,4,22,14,19,33,1,13,21,28,5,33,27,21,25,22,4,26,16,18,31,29,12,20,1,13,5,14,19,28,3,9,2,11,7,23,8,36,35,15,30,32,17,10,34,24,6,14,7,23,1,5,29,30,20,17,13,8,35,36,32,11,21,31,24,6,27,19,33,26,22,10,34,25,28,12,9,16,3,18,15,4,2,21,20,35,6,13,25,15,32,14,4,2,18,5,7,19,16,36,22,23,10,28,1,8,9,12,3,11,34,27,29,30,31,24,26,33,17,34,28,22,23,10,1,29,5,11,33,19,36,9,3,6,25,12,31,27,24,17,30,14,26,4,15,20,13,21,18,2,35,32,16,8,7,19,33,11,30,8,2,35,34,31,27,1,20,10,21,24,4,18,26,22,13,12,29,16,15,32,5,17,14,9,7,25,6,28,3,36,23,32,16,18,15,3,36,17,9,26,7,24,8,27,14,30,1,20,11,35,33,21,19,2,5,28,25,10,23,31,6,12,13,22,4,29,34,12,17,29,4,9,7,13,22,10,3,25,28,15,2,8,23,34,32,36,31,20,18,6,11,26,30,35,16,24,33,27,5,1,19,14,21,31,24,5,26,14,27,21,30,16,6,12,23,33,35,29,13,28,17,25,32,3,7,34,4,2,19,1,8,22,36,15,18,11,9,10,20,27,2,32,22,29,17,16,21,8,18,31,25,11,19,12,35,1,10,7,4,34,9,3,33,30,24,13,15,23,26,28,36,5,6,20,14,7,1,4,13,23,30,2,10,33,14,17,19,18,26,22,34,3,9,21,16,27,15,5,36,31,29,6,20,35,28,11,24,25,8,32,12,35,11,10,19,25,24,3,26,29,34,5,32,7,15,33,36,23,13,31,14,22,6,20,28,9,12,8,1,17,4,21,16,2,18,30,27,36,9,14,34,28,33,4,23,30,12,35,15,6,31,20,8,17,16,18,25,2,24,19,10,27,21,7,32,11,5,3,26,29,13,22,1,3,5,31,12,21,6,7,1,27,20,28,11,24,29,25,14,32,2,26,30,8,35,17,13,22,36,16,18,33,10,19,4,34,23,9,15,20,8,26,16,18,15,6,13,22,9,36,24,4,27,28,30,21,5,12,23,32,11,29,1,34,14,2,25,19,3,17,10,31,7,35,33,22,35,25,24,33,32,10,19,1,8,30,26,21,36,3,9,5,20,15,29,14,16,12,18,13,6,31,17,4,23,34,2,7,11,27,28,28,12,3,11,26,14,31,7,5,32,33,6,25,4,35,18,24,27,2,20,23,34,10,30,8,9,22,29,36,16,13,15,21,1,17,19,29,34,7,5,1,9,11,2,12,23,4,22,17,6,14,31,30,28,19,26,33,32,13,21,25,35,15,10,3,27,18,20,36,24,16,8,18,23,17,27,6,19,20,36,9,21,34,16,13,8,7,15,10,29,24,11,25,4,1,3,33,28,14,12,30,2,22,32,26,35,5,31,30,4,2,31,15,21,14,3,13,35,18,29,16,12,32,19,26,34,17,22,36,27,28,8,20,11,5,24,7,1,23,33,6,10,25,9,10,13,36,8,20,16,28,24,25,15,27,17,2,23,1,22,11,33,9,5,35,31,7,6,19,18,32,26,34,21,14,29,3,30,12,4,1,29,15,32,7,22,5,12,35,28,21,13,8,33,31,17,9,18,11,34,10,3,36,24,16,23,26,4,20,14,6,25,27,2,19,30,24,14,13,18,36,23,8,17,6,25,20,2,29,28,26,3,16,35,33,12,1,22,4,19,21,32,27,30,5,15,7,34,9,31,11,10,8,10,28,35,12,34,27,31,19,11,3,30,32,5,36,2,6,21,20,15,29,25,9,16,18,22,24,7,13,17,4,23,14,33,1,26,4,21,27,33,19,20,1,29,36,26,22,10,30,24,15,7,13,12,32,2,6,23,35,14,11,31,28,9,25,34,5,8,16,17,3,18,2,25,6,9,11,26,32,18,4,16,15,7,34,20,23,27,19,14,5,28,31,13,30,17,1,33,29,3,10,8,24,12,35,22,21,36,5,31,30,17,16,3,33,14,34,24,23,9,22,25,10,11,4,1,8,7,26,21,18,27,36,2,12,19,6,35,29,28,15,20,13,32] == sol['solution']
