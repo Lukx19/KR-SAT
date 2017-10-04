@@ -1,14 +1,3 @@
-"""
-The implementation of this Sudoku solver is based on the paper:
-
-    "A SAT-based Sudoku solver" by Tjark Weber
-
-    https://www.lri.fr/~conchon/mpri/weber.pdf
-
-If you want to understand the clause generation below, you are strongly
-encouraged to read the paper first.  The paper is very short, but contains
-all necessary information.
-"""
 import pycosat
 
 def v(i, j, d,size_block):
